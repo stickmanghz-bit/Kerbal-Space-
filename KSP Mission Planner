@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Delta V Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --ink:#e7f6ea; --dim:#8fb89a; --blue:#3ddc7a; --bg:#0c120e; --panel:#121a14; --card:#182118; --line:#243428; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 Saira, "Segoe UI", sans-serif; }
+  
+  /* Custom Webkit Scrollbars for Terminal Vibe */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2f6a40; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3dcc78; }
+
+  header, .antenna-head { height: 70px; background: #101810; display: flex; align-items: center; gap: 16px; padding: 0 22px; color: #dff6e4; border-bottom: 2px solid #3dcc78; }
+  .mark { width: 44px; height: 44px; border-radius: 8px; border: 2px solid #3dcc78; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #3dcc78; }
+  header h1, .antenna-head h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: .14em; }
+  .app { display: grid; grid-template-columns: 340px 1fr; height: calc(100vh - 70px); min-height: 640px; }
+  aside { background: #0e160f; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  .journey { flex: 1; overflow: auto; padding: 16px 14px 8px; }
+  .origin, .stop { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .card { background: #162016; border-radius: 8px; padding: 12px 14px; margin: 10px 0 10px 22px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; border: 1px solid #2a4630; }
+  .card b { font-size: 20px; font-weight: 600; color: #d8ffdf; }
+  .card span, .lbl { color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .rm { background: transparent; color: #ff8d7a; border: 0; cursor: pointer; font: 12px Saira, sans-serif; }
+  #boot { position: fixed; inset: 0; background: #050805; color: #3dcc78; font: 14px/1.6 "Courier New", monospace; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 40px; opacity: 1; transition: opacity 0.6s ease; }
+  #boot.done { opacity: 0; pointer-events: none; }
+  #boot pre { margin: 0; white-space: pre-wrap; max-width: 640px; text-align: center; }
+  #boot .cursor { display: inline-block; width: 8px; height: 1em; background: #3dcc78; margin-left: 2px; animation: blink 0.7s step-end infinite; vertical-align: text-bottom; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .foot { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-top: 1px solid var(--line); background: #0a100c; }
+  .foot strong, .big { font-size: 28px; font-weight: 600; color: #7dffa0; }
+  button.go, .spin button { background: #1a2e1c; color: #dff6e4; border: 1px solid #2f6a40; cursor: pointer; font: 600 13px Saira, sans-serif; }
+  button.go { border-radius: 8px; padding: 8px 14px; }
+  #dsn, #relays, #relMode { display: flex; gap: 8px; margin-top: 8px; }
+  #dsn button, #relays button, #relMode button { flex: 1; border-radius: 8px; padding: 8px 0; font-size: 12px; }
+  #relays button { padding: 8px 2px; font-size: 11px; }
+  #dsn button.on, #relays button.on, #relMode button.on { background: #3dcc78; color: #061208; border-color: #3dcc78; outline: none; }
+  .stage { display: grid; grid-template-rows: 1fr auto; min-height: 0; position: relative; }
+  svg#map { width: 100%; height: 100%; background: radial-gradient(circle at 50% 42%, #1a3320 0%, #101810 46%, #070c08 100%); cursor: grab; touch-action: none; }
+  
+  /* Polished Tooltip with Backdrop Blur and Soft Green Glow */
+  #tip { position: absolute; display: none; background: rgba(18,26,20,0.92); backdrop-filter: blur(4px); color: #f4f1ea; border: 1px solid #3dcc78; border-radius: 8px; padding: 8px 10px; font-size: 12px; pointer-events: none; z-index: 5; box-shadow: 0 4px 16px rgba(61,220,120,0.25); }
+
+  .bar { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 6px 8px; background: #101810; border-top: 2px solid #3dcc78; }
+  .bar > div:first-child { display: flex; flex-direction: column; gap: 4px; align-items: stretch; width: 100%; max-width: 480px; }
+  .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 460px; }
+  .toggles label { display: flex; width: 100%; box-sizing: border-box; justify-content: center; text-align: center; white-space: normal; line-height: 1.2; }
+  .bar label:has(input[type="checkbox"]) { gap: 0; margin: 0; padding: 6px 4px; border: 1px solid #2f6a40; border-radius: 6px; background: #1a2e1c; color: #dff6e4; cursor: pointer; font-size: 11px; white-space: nowrap; justify-content: center; text-align: center; width: 100%; box-sizing: border-box; }
+  .bar label:has(input[type="checkbox"]:checked) { background: #3dcc78; color: #061208; border-color: #3dcc78; }
+  .bar label input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+  
+  /* Map Node Glow Effects */
+  .node circle { filter: drop-shadow(0 0 4px rgba(61,220,120,0.25)); transition: filter 0.2s; }
+  .node:hover circle { filter: drop-shadow(0 0 8px rgba(61,220,120,0.7)); }
+  
+  .node text { font: 600 10px Saira, sans-serif; fill: #d4f0da; pointer-events: none; }
+  .name { font: 600 14px Saira, sans-serif; fill: #f3fff5; pointer-events: none; }
+  .antenna { background: #0e160f; border-top: 2px solid #3dcc78; overflow: hidden; }
+  .ant-read { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px; align-items: stretch; }
+  .transfer-grid { grid-template-columns: repeat(4, 1fr); }
+  .win svg { display: block; width: 140px; height: 100px; margin: 8px 0; }
+  .stat { background: #142016; border-radius: 8px; padding: 12px 14px; border: 1px solid #2a4630; overflow: hidden; }
+  .ant-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 0 16px 16px; }
+  .ant-card { background: #142016; border-radius: 8px; padding: 12px 14px; border: 1px solid #2a4630; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+  .ant-info { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .ant-title { font-weight: 600; font-size: 14px; color: var(--ink); }
+  .ant-range { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .ant-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .ant-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .badge-direct { background: rgba(224,161,90,.18); color: #7dffa0; }
+  .badge-relay { background: rgba(125,206,160,.16); color: #8ee0a8; }
+  .ant-ctrl { display: flex; align-items: center; justify-content: space-between; background: #0e160f; border-radius: 8px; padding: 4px 10px; border: 1px solid #2a4630; }
+  .spin { display: flex; align-items: center; gap: 8px; }
+  .spin button { width: 24px; height: 24px; border-radius: 6px; background: #1a2e1c; color: #dff6e4; border: 0; font-size: 15px; font-weight: 700; display: grid; place-items: center; }
+  .spin button:hover { background: #3dcc78; color: #061208; }
+  .spin span { font-weight: 600; min-width: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+  .ok { color: #8ee0a8; } .bad { color: #ff8d7a; }
+  select, input[type="text"] { background: #0e160f; color: #f4f1ea; border: 1px solid #2f6a40; padding: 6px; border-radius: 6px; }
+  input[type="range"] { accent-color: #3dcc78; }
+  #warn { color: #7dffa0; min-height: 18px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div id="boot"><pre id="bootText"></pre><span class="cursor"></span></div>
+<script>
+(function() {
+  const lines = [
+    "KERBAL SPACE CENTER  ·  MISSION PLANNER",
+    "BIOS v1.4.2  ·  Kerbol System",
+    "",
+    "Initializing tracking station........ OK",
+    "Loading planetary data............... OK",
+    "Calibrating transfer windows......... OK",
+    "Mapping SOI boundaries............... OK",
+    "Checking for the Kraken.............. not found (this time)",
+    "  > Kraken status: sleeping. Do not wake.",
+    "Waking Jeb............................ he was already awake",
+    "Standing by for crew................. READY",
+    "",
+    "Kerbal Universe online."
+  ];
+  const el = document.getElementById("bootText");
+  let i = 0;
+  function next() {
+    if (i < lines.length) {
+      el.textContent += (i ? "\n" : "") + lines[i++];
+      setTimeout(next, i < 3 ? 320 : 400);
+    } else {
+      setTimeout(() => {
+        document.getElementById("boot").classList.add("done");
+        setTimeout(() => document.getElementById("boot").remove(), 800);
+      }, 900);
+    }
+  }
+  setTimeout(next, 300);
+})();
+</script>
+<header><div class="mark">DV</div><h1>DELTA V PLANNER</h1></header>
+<div class="app">
+  <aside>
+    <div class="journey" id="journey"></div>
+    <div class="foot"><div>Total <strong id="total">0 m/s</strong></div><button class="go" id="clear" type="button">Clear</button></div>
+  </aside>
+  <div class="stage">
+    <svg id="map" viewBox="0 0 1100 700"></svg>
+    <div id="tip"></div>
+    <div class="bar">
+      <div>
+        <div class="toggles">
+          <label data-tip="Start already in low Kerbin orbit instead of launching from the surface. Removes the launch delta-v."><input id="fromLko" type="checkbox" /> Start in LKO</label>
+          <label data-tip="Adds a full return leg to Kerbin. Aerobrake Home is forced on unless Orbit Before Landing (Kerbin) is selected."><input id="round" type="checkbox" /> Round Trip</label>
+          <label data-tip="Use the destination atmosphere to capture instead of a full propulsive burn. Only available if a body in the journey has an atmosphere."><input id="aeroIn" type="checkbox" /> Aerobrake In</label>
+          <label data-tip="Use Kerbin’s atmosphere on the return. Forced on for a direct return. With Orbit Before Landing (Kerbin), choose aero-to-orbit or a full propulsive capture."><input id="aeroHome" type="checkbox" /> Aerobrake Home</label>
+          <label data-tip="Cuts landing delta-v on the destination if it has an atmosphere. Does not affect the Kerbin return."><input id="chute" type="checkbox" /> Parachutes</label>
+          <label data-tip="Cuts landing delta-v on the Kerbin return. Defaults on for Round Trip (can be turned off). Only available when Round Trip is on."><input id="chuteKerbin" type="checkbox" /> Parachutes (Kerbin)</label>
+          <label data-tip="Circularize into orbit at the destination before landing. Off = direct surface entry (no circularization). Works for any body, with or without atmosphere."><input id="orbitFirst" type="checkbox" /> Orbit Before Land</label>
+          <label data-tip="Circularize into Kerbin orbit on the return before landing. Off = direct aerobrake. Only available when Round Trip is on."><input id="orbitFirstKerbin" type="checkbox" /> Orbit Before Landing (Kerbin)</label>
+        </div>
+        <div class="cont-wrap" style="text-align:center;margin-top:4px"><label class="cont">Contingency <b id="conV">0%</b> <input id="con" type="range" min="0" max="50" step="1" value="0" /></label></div>
+        <p id="warn"></p>
+      </div>
+      <div><div class="lbl">Delta-v required</div><div class="big" id="big">0 m/s</div></div>
+      <div><div class="lbl">Transfer angle to target</div><div class="big" id="ang">—</div><div class="lbl">Ejection angle (from prograde) <b id="ejectAng">—</b></div></div>
+      <div data-tip="Plane change on SOI entry, before capture. You already know the inclination you need (for example 90° polar). Burn far out on the incoming path where speed is low. Auto fills the body’s inclination. Check “Already in orbit” only if you are changing plane from an established low orbit." data-tip-side="left"><div class="lbl">Inclination change</div>
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <input id="di" type="text" inputmode="decimal" value="0" style="width:64px" /> deg
+          <button type="button" id="diAuto" class="go" style="padding:2px 8px;font-size:11px">Auto</button>
+        </div>
+        <div class="lbl" style="margin-top:6px">Burn altitude</div>
+        <input id="apo" type="text" inputmode="decimal" value="" placeholder="km" style="width:80px" /> km
+        <label style="margin-top:6px !important;width:auto !important;max-width:100%;white-space:normal !important;padding:4px 8px !important;font-size:10px;display:inline-flex !important"><input id="diInOrbit" type="checkbox" /> Already in orbit</label>
+        <div class="lbl" id="soiNote"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<section class="antenna">
+  <div class="antenna-head"><div class="mark">S</div><h1>STAGES</h1></div>
+  <div class="ant-read" id="stages"></div>
+</section>
+<section class="antenna">
+  <div class="antenna-head"><div class="mark">A</div><h1>ANTENNA & COMMNET</h1></div>
+  <div class="ant-read">
+    <div class="stat"><div class="lbl">Tracking Station</div>
+      <div id="dsn">
+        <button type="button" class="go" data-g="2">Level 1 · 2G</button>
+        <button type="button" class="go" data-g="50">Level 2 · 50G</button>
+        <button type="button" class="go on" data-g="250">Level 3 · 250G</button>
+      </div>
+    </div>
+    <div class="stat"><div class="lbl" id="nearLbl">Closest to Kerbin</div><div class="big" id="near">—</div></div>
+    <div class="stat"><div class="lbl" id="farLbl">Farthest from Kerbin</div><div class="big" id="far">—</div></div>
+    <div class="stat"><div class="lbl">Your link reaches</div><div class="big" id="rng">—</div><div id="verdict"></div></div>
+  </div>
+  <div class="ant-grid" id="ants"></div>
+</section>
+<section class="antenna">
+  <div class="antenna-head"><div class="mark">T</div><h1>TRANSFER</h1></div>
+  <div class="ant-read transfer-grid">
+    <div class="stat win"><div class="lbl">Transfer Window to Target</div><div class="big" id="phase">—</div><svg id="winTo" viewBox="0 0 140 100"></svg><div class="lbl">Arrival periapsis</div><div class="big" id="pe">—</div><div class="lbl" id="peNote"></div></div>
+    <div class="stat win"><div class="lbl">Transfer Window from Target</div><div class="big" id="phaseBack">—</div><svg id="winFrom" viewBox="0 0 140 100"></svg><div class="lbl">Return periapsis</div><div class="big" id="peBack">—</div><div class="lbl" id="peBackNote"></div></div>
+    <div class="stat"><div class="lbl">Coast</div><div class="big" id="coast">—</div><div class="lbl">Kerbin days, 6 h each</div></div>
+    <div class="stat"><div class="lbl">Next window</div><div class="big" id="syn">—</div><div class="lbl" id="winBody">Days between chances</div></div>
+  </div>
+</section>
+<section class="antenna">
+  <div class="antenna-head"><div class="mark">R</div><h1>RELAY CONSTELLATION & RESONANT ORBIT</h1></div>
+  <div class="ant-read">
+    <div class="stat">
+      <div class="lbl">Constellation Satellites</div>
+      <div id="relays">
+        <button type="button" class="go" data-n="2">2</button>
+        <button type="button" class="go on" data-n="3">3</button>
+        <button type="button" class="go" data-n="4">4</button>
+        <button type="button" class="go" data-n="5">5</button>
+      </div>
+      <div class="lbl" style="margin-top:8px">Deployment Mode</div>
+      <div id="relMode">
+        <button type="button" class="go on" data-m="in">Drive In (Pe)</button>
+        <button type="button" class="go" data-m="out">Drive Out (Ap)</button>
+      </div>
+      <div class="lbl" style="margin-top:8px">Target Orbit Altitude (km)</div>
+      <input id="relAlt" type="text" inputmode="decimal" value="" placeholder="auto" style="width:120px" />
+    </div>
+    <div class="stat"><div class="lbl">Constellation Geometry</div><svg id="relFig" viewBox="0 0 140 100" width="140" height="100"></svg></div>
+    <div class="stat"><div class="lbl">Orbital Period & Spacing</div><div class="big" id="relPer">—</div><div class="lbl">Spacing angle <b id="relGap">—</b></div><div class="lbl">Neighbor range <b id="relLink">—</b></div></div>
+    <div class="stat"><div class="lbl">Resonant Maneuver Plan</div><div class="big" id="relResAlt">—</div><div class="lbl">Bus period <b id="relBus">—</b></div><div class="lbl">Maneuver ΔV <b id="relDvManeuver">—</b></div><div class="lbl">Total placement ΔV <b id="relDvTotal">—</b></div><div class="lbl" id="relNote"></div></div>
+  </div>
+  <div style="padding:0 14px 12px; color:var(--dim); font-size:12px; line-height:1.4; text-align:center">
+    <b>Note:</b> Check that the resonant orbit (Drive Out/In) does not cross a moon’s SOI. A crossing can alter the bus timing and break the planned resonance. The warning above will flag any intersection. If you are establishing a relay constellation, add the Total placement ΔV shown above to your overall mission delta-v budget — that is the extra fuel cost for driving and circularizing each additional relay.
+  </div>
+</section>
+<section class="antenna">
+  <div class="antenna-head"><div class="mark">P</div><h1>SCIENCE TRANSMISSION POWER</h1></div>
+  <div class="ant-read" id="sciencePower">
+    <div class="stat" style="grid-column:1/-1"><div class="lbl">Select a destination and antenna above</div></div>
+  </div>
+  <div style="padding:0 14px 12px; color:var(--dim); font-size:12px; line-height:1.4; text-align:center">
+    <b>Note:</b> These figures are the EC cost for a full transmission of one experiment (or M700 scan) with the selected antenna. They do <b>not</b> include continuous draws from the probe core, reaction wheels, lights, or any other systems. Size your batteries for the peak transmission plus your normal vessel load.
+  </div>
+</section>
+<script>
+const SUN = 1.1723328e18, KB = { mu: 3.5316e12, r: 600000, sma: 13599840256 };
+const raw = {
+  Moho:   { mu:1.6860938e11, r:250000, sma:5263138304, inc:7, atm:0, low:20, soi:9646663, parent:"Kerbol", color:"#c46b3a", ang:200 },
+  Eve:    { mu:8.1717302e12, r:700000, sma:9832684544, inc:2.1, atm:90, low:100, soi:85109365, parent:"Kerbol", color:"#8e4aa8", ang:150, ascent:8000 },
+  Gilly:  { mu:8289449.8, r:13000, sma:31500000, inc:12, atm:0, low:8, soi:126123, parent:"Eve", color:"#c9a0dc" },
+  Kerbin: { mu:KB.mu, r:KB.r, sma:KB.sma, inc:0, atm:70, low:80, soi:84159286, parent:"Kerbol", color:"#3c95d4", ang:100, home:true },
+  Mun:    { mu:6.5138398e10, r:200000, sma:12000000, inc:0, atm:0, low:14, soi:2429559, parent:"Kerbin", color:"#b7b7b7" },
+  Minmus: { mu:1.7658e9, r:60000, sma:47000000, inc:6, atm:0, low:10, soi:2247428, parent:"Kerbin", color:"#7dcea0" },
+  Duna:   { mu:3.0136321e11, r:320000, sma:20726155264, inc:0.06, atm:50, low:60, soi:47921949, parent:"Kerbol", color:"#e15b4a", ang:40, ascent:1450 },
+  Ike:    { mu:1.8568369e10, r:130000, sma:3200000, inc:0.2, atm:0, low:12, soi:1049599, parent:"Duna", color:"#d0d0d0" },
+  Dres:   { mu:2.1484489e10, r:138000, sma:40839348203, inc:5, atm:0, low:12, soi:32832840, parent:"Kerbol", color:"#8d9a72", ang:-10 },
+  Jool:   { mu:2.82528e14, r:6000000, sma:68773560320, inc:1.3, atm:200, low:210, soi:2455985200, parent:"Kerbol", color:"#3e9a55", ang:-70, noLand:true },
+  Laythe: { mu:1.962e12, r:500000, sma:27184000, inc:0, atm:50, low:60, soi:3723646, parent:"Jool", color:"#3aa8b0", ascent:2900 },
+  Vall:   { mu:2.074815e11, r:300000, sma:43152000, inc:0, atm:0, low:15, soi:2406401, parent:"Jool", color:"#6a8fd4" },
+  Tylo:   { mu:2.82528e12, r:600000, sma:68500000, inc:0.03, atm:0, low:15, soi:10856518, parent:"Jool", color:"#d0b45a" },
+  Bop:    { mu:2.4868349e9, r:65000, sma:128500000, inc:15, atm:0, low:15, soi:1221061, parent:"Jool", color:"#c4a07a" },
+  Pol:    { mu:7.2170208e8, r:44000, sma:179890000, inc:4.25, atm:0, low:10, soi:1042139, parent:"Jool", color:"#d2c07a" },
+  Eeloo:  { mu:7.4410815e10, r:210000, sma:90118820000, inc:6.15, atm:0, low:15, soi:119082940, parent:"Kerbol", color:"#c8c8c8", ang:-130 }
+};
+const CX = 550, CY = 350;
+const circ = (mu, r) => Math.sqrt(mu / r);
+function hohmann(mu, r1, r2) {
+  const a = (r1 + r2) / 2;
+  return { dv1: Math.abs(Math.sqrt(mu * (2 / r1 - 1 / a)) - circ(mu, r1)), dv2: Math.abs(circ(mu, r2) - Math.sqrt(mu * (2 / r2 - 1 / a))) };
+}
+const eject = (mu, r, vInf) => Math.sqrt(vInf * vInf + 2 * mu / r) - circ(mu, r);
+const fmt = n => Math.round(n).toLocaleString("en-US");
+function phase(sma) {
+  const a = (KB.sma + sma) / 2, t = Math.PI * Math.sqrt(a ** 3 / SUN), n = Math.sqrt(SUN / sma ** 3);
+  let deg = (Math.PI - n * t) * 180 / Math.PI;
+  while (deg > 180) deg -= 360;
+  while (deg < -180) deg += 360;
+  return deg;
+}
+function phaseBack(sma) {
+  const a = (KB.sma + sma) / 2, t = Math.PI * Math.sqrt(a ** 3 / SUN), n = Math.sqrt(SUN / KB.sma ** 3);
+  let deg = (Math.PI - n * t) * 180 / Math.PI;
+  while (deg > 180) deg -= 360;
+  while (deg < -180) deg += 360;
+  return deg;
+}
+function windowFig(angle, color, leaveInner, isOuter) {
+  const id = leaveInner ? "to" : "from";
+  const cx = 70, cy = 50, rIn = 16, rOut = 34;
+  const sun = `<circle cx="${cx}" cy="${cy}" r="7" fill="#f0c84a"/>`;
+  if (angle == null) return sun + `<circle cx="${cx}" cy="${cy}" r="${rIn}" fill="none" stroke="#3a4154"/><circle cx="${cx}" cy="${cy}" r="${rOut}" fill="none" stroke="#3a4154"/>`;
+  // Real positions: Kerbin is inner for outer targets, outer for inner targets (Moho, Eve)
+  const kerbinIsInner = isOuter !== false;
+  const kerbinR = kerbinIsInner ? rIn : rOut;
+  const targetR = kerbinIsInner ? rOut : rIn;
+  const innerColor = kerbinIsInner ? "#3c95d4" : color;
+  const outerColor = kerbinIsInner ? color : "#3c95d4";
+  // To target: leave Kerbin. From target: leave the target.
+  const goingTo = id === "to";
+  const depR = goingTo ? kerbinR : targetR;
+  const arrR = goingTo ? targetR : kerbinR;
+  const depColor = goingTo ? "#3c95d4" : color;
+  const arrColor = goingTo ? color : "#3c95d4";
+  const ring = (r, stroke) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${stroke}"/>`;
+  return sun + ring(rIn, innerColor) + ring(rOut, outerColor) +
+    `<path id="arc${id}" fill="none" stroke="#e15b4a" stroke-width="2" stroke-dasharray="4 3"/>` +
+    `<circle id="dep${id}" r="4" fill="${depColor}"/>` +
+    `<circle id="arr${id}" r="4" fill="${arrColor}"/>` +
+    `<circle id="ves${id}" r="2.5" fill="#7dffa0"/>` +
+    `<g id="cfg${id}" data-angle="${angle}" data-depr="${depR}" data-arrr="${arrR}" data-cx="${cx}" data-cy="${cy}"></g>`;
+}
+function animateWindows() {
+  const DUR = 4000, HOLD = 900, CYCLE = DUR + HOLD;
+  function tick(now) {
+    ["to", "from"].forEach(id => {
+      const cfgEl = document.getElementById("cfg" + id);
+      const dep = document.getElementById("dep" + id);
+      const arr = document.getElementById("arr" + id);
+      const ves = document.getElementById("ves" + id);
+      const arc = document.getElementById("arc" + id);
+      if (!cfgEl || !dep || !arr || !ves || !arc) return;
+      const angle = Number(cfgEl.dataset.angle);
+      const depR = Number(cfgEl.dataset.depr);
+      const arrR = Number(cfgEl.dataset.arrr);
+      const cx = Number(cfgEl.dataset.cx);
+      const cy = Number(cfgEl.dataset.cy);
+      const t = now % CYCLE;
+      const u = Math.min(1, t / DUR);
+      // Prograde = counter-clockwise on screen = decreasing angle in SVG
+      const dir = -1;
+      const innerFaster = 1.0, outerSlower = 0.6;
+      const wDep = depR < arrR ? innerFaster : outerSlower;
+      const wArr = arrR < depR ? innerFaster : outerSlower;
+      // Departure at 0. Vessel ends 180° prograde. Target timed to be there.
+      const depAng0 = 0;
+      const vesselEnd = depAng0 + dir * Math.PI;
+      const arrAng0 = vesselEnd - dir * wArr * 0.5;
+      const depAng = depAng0 + dir * wDep * 0.5 * u;
+      const arrAng = arrAng0 + dir * wArr * 0.5 * u;
+      dep.setAttribute("cx", cx + Math.cos(depAng) * depR);
+      dep.setAttribute("cy", cy + Math.sin(depAng) * depR);
+      arr.setAttribute("cx", cx + Math.cos(arrAng) * arrR);
+      arr.setAttribute("cy", cy + Math.sin(arrAng) * arrR);
+      // Hohmann half-ellipse: 180° prograde from departure orbit to arrival orbit
+      const sweep = dir * Math.PI;
+      const pts = [];
+      for (let i = 0; i <= 32; i++) {
+        const f = i / 32;
+        const nu = f * Math.PI;
+        const rPer = Math.min(depR, arrR), rAp = Math.max(depR, arrR);
+        const a = (rPer + rAp) / 2, e = (rAp - rPer) / (rAp + rPer);
+        const r = a * (1 - e * e) / (1 + e * Math.cos(depR < arrR ? nu : Math.PI - nu));
+        const ang = depAng0 + sweep * f;
+        pts.push([cx + Math.cos(ang) * r, cy + Math.sin(ang) * r]);
+      }
+      const uIdx = Math.min(32, Math.round(u * 32));
+      ves.setAttribute("cx", pts[uIdx][0]);
+      ves.setAttribute("cy", pts[uIdx][1]);
+      arc.setAttribute("d", "M" + pts.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" L"));
+    });
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+animateWindows();
+function ejectionAngle(sma) {
+  const park = KB.r + 80000;
+  const h = hohmann(SUN, KB.sma, sma);
+  const e = 1 + park * h.dv1 * h.dv1 / KB.mu;
+  const phi = 180 - Math.acos(-1 / e) * 180 / Math.PI;
+  // Return angle from prograde (most KSP tools quote this)
+  const fromRetro = sma > KB.sma ? phi : 360 - phi;
+  return (fromRetro + 180) % 360;
+}
+function kerbinCapture(vInf) {
+  return eject(KB.mu, KB.r + 80000, vInf);
+}
+function kerbinHome(b, prevName) {
+  if (!b) return 950;
+  if (b.home) {
+    // Explicit Kerbin stop: use real incoming v∞ from the previous body if available
+    if (prevName && raw[prevName]) {
+      const prev = raw[prevName];
+      const k = kerbinTo(prev.parent === "Kerbol" ? prevName : prev.parent);
+      return k.vInfHome ? kerbinCapture(k.vInfHome) : 950;
+    }
+    return 950;
+  }
+  if (b.parent === "Kerbin") return 950;
+  const k = kerbinTo(b.parent === "Kerbol" ? Object.keys(raw).find(n => raw[n] === b) : b.parent);
+  return k.vInfHome ? kerbinCapture(k.vInfHome) : 950;
+}
+function kerbinTo(name) {
+  const b = raw[name], park = KB.r + 80000, rd = b.r + b.low * 1000;
+  if (b.parent === "Kerbin") {
+    const h = hohmann(KB.mu, park, b.sma);
+    const vs = Math.sqrt(KB.mu * (2 / b.sma - 2 / (park + b.sma)));
+    return { eject: h.dv1, cap: eject(b.mu, rd, Math.abs(circ(KB.mu, b.sma) - vs)), angle: null };
+  }
+  if (b.parent === "Kerbol") {
+    const h = hohmann(SUN, KB.sma, b.sma);
+    return { eject: eject(KB.mu, park, h.dv1), cap: eject(b.mu, rd, h.dv2), angle: phase(b.sma), vInfHome: h.dv1 };
+  }
+  const p = raw[b.parent], parent = kerbinTo(b.parent), rp = p.r + p.low * 1000, h = hohmann(p.mu, rp, b.sma);
+  const vs = Math.sqrt(p.mu * (2 / b.sma - 2 / (rp + b.sma)));
+  return { eject: parent.eject, parentCap: parent.cap, parent: b.parent, to: h.dv1, cap: eject(b.mu, rd, Math.abs(circ(p.mu, b.sma) - vs)), angle: phase(p.sma), vInfHome: parent.vInfHome };
+}
+function transferBetween(fromName, toName) {
+  const from = raw[fromName], to = raw[toName];
+  if (!from || !to || from.parent !== to.parent) return null;
+  const mu = from.parent === "Kerbol" ? SUN : raw[from.parent].mu;
+  const h = hohmann(mu, from.sma, to.sma);
+  // Convert heliocentric v∞ into actual burns from/to low parking orbits
+  const rFrom = from.r + from.low * 1000;
+  const rTo = to.r + to.low * 1000;
+  return {
+    eject: eject(from.mu, rFrom, h.dv1),
+    cap: eject(to.mu, rTo, h.dv2),
+    note: "transfer " + fromName + " → " + toName
+  };
+}
+function fromParent(name, fromFlyby) {
+  const b = raw[name], p = raw[b.parent], rd = b.r + b.low * 1000;
+  if (fromFlyby) {
+    const vInf = 700;
+    return { to: 40, cap: eject(b.mu, rd, vInf), note: "from " + b.parent + " fly-by (est.)" };
+  }
+  const rp = p.r + p.low * 1000, h = hohmann(p.mu, rp, b.sma);
+  const vs = Math.sqrt(p.mu * (2 / b.sma - 2 / (rp + b.sma)));
+  return { to: h.dv1, cap: eject(b.mu, rd, Math.abs(circ(p.mu, b.sma) - vs)), note: "from " + b.parent + " orbit" };
+}
+function planeAt(name, di, apoKm, inOrbit) {
+  const b = raw[name], edge = (b.soi - b.r) / 1000;
+  const apo = Math.min(Math.max(apoKm, b.low + 5), edge);
+  const rPe = b.r + b.low * 1000, rAp = b.r + apo * 1000;
+  if (inOrbit) {
+    // Rare case: already in low orbit. Raise to apoapsis, change plane, drop back.
+    const vAp = Math.sqrt(b.mu * (2 / rAp - 2 / (rPe + rAp)));
+    const planeDv = 2 * vAp * Math.sin((di * Math.PI / 180) / 2);
+    const raise = hohmann(b.mu, rPe, rAp);
+    return { dv: planeDv, raise: raise.dv1, drop: raise.dv1, apo, edge };
+  }
+  // Default: plane change on SOI entry, before capture. Burn far out on the incoming path.
+  const vIn = Math.sqrt(b.mu * (2 / rAp));
+  const planeDv = 2 * vIn * Math.sin((di * Math.PI / 180) / 2);
+  return { dv: planeDv, raise: 0, drop: 0, apo, edge };
+}
+let route = [], warn = "";
+let kerbinChuteDefaulted = false;
+function planetPos(name, mode) {
+  const a = raw[name].ang * Math.PI / 180;
+  const d = mode === "fly" ? 160 : mode === "orbit" ? 280 : 400;
+  return { x: CX + Math.cos(a) * d, y: CY + Math.sin(a) * d };
+}
+function nodePos(name, mode) {
+  const b = raw[name];
+  if (b.parent === "Kerbol") return planetPos(name, mode);
+  const end = planetPos(b.parent, raw[b.parent].noLand ? "orbit" : "land");
+  const siblings = Object.keys(raw).filter(n => raw[n].parent === b.parent);
+  const i = siblings.indexOf(name);
+  const n = siblings.length;
+  const parent = raw[b.parent].ang * Math.PI / 180;
+  const perp = parent + Math.PI / 2;
+  const slot = i - (n - 1) / 2;
+  const step = 64;
+  const side = slot === 0 && n === 1 ? 1 : slot;
+  const out = 70 + (mode === "fly" ? 0 : mode === "orbit" ? 58 : 116);
+  return {
+    x: end.x + Math.cos(perp) * (side * step) + Math.cos(parent) * out,
+    y: end.y + Math.sin(perp) * (side * step) + Math.sin(parent) * out
+  };
+}
+function draw() {
+  const sunR = 28;
+  let s = `<g class="node" data-id="Kerbol:orbit"><circle cx="${CX}" cy="${CY}" r="${sunR}" fill="#f0c84a" stroke="#fff" stroke-width="3"/><text class="name" x="${CX}" y="${CY + 5}" text-anchor="middle" fill="#1b1e28">Kerbol</text></g>`;
+  Object.keys(raw).forEach(name => {
+    const b = raw[name];
+    const modes = b.noLand ? ["fly", "orbit"] : ["fly", "orbit", "land"];
+    const pts = modes.map(m => nodePos(name, m));
+    let start;
+    if (b.parent === "Kerbol") {
+      const dx = pts[0].x - CX, dy = pts[0].y - CY, len = Math.hypot(dx, dy) || 1;
+      start = { x: CX + dx / len * (sunR + 2), y: CY + dy / len * (sunR + 2) };
+    } else {
+      const end = planetPos(b.parent, raw[b.parent].noLand ? "orbit" : "land");
+      const dx = pts[0].x - end.x, dy = pts[0].y - end.y, len = Math.hypot(dx, dy) || 1;
+      start = { x: end.x + dx / len * 14, y: end.y + dy / len * 14 };
+    }
+    const on = route.some(r => r.name === name);
+    s += `<line x1="${start.x}" y1="${start.y}" x2="${pts[0].x}" y2="${pts[0].y}" stroke="${b.color}" stroke-width="${on ? 6 : 3}" stroke-linecap="round"/>`;
+    for (let i = 0; i < pts.length - 1; i++) s += `<line x1="${pts[i].x}" y1="${pts[i].y}" x2="${pts[i + 1].x}" y2="${pts[i + 1].y}" stroke="${b.color}" stroke-width="${on ? 6 : 3}"/>`;
+    
+    modes.forEach((mode, i) => {
+      const hit = route.some(r => r.name === name && r.mode === mode);
+      const mark = mode === "fly" ? "F" : mode === "orbit" ? "O" : "L";
+      s += `<g class="node" data-id="${name}:${mode}"><circle cx="${pts[i].x}" cy="${pts[i].y}" r="12" fill="${hit ? "#fff" : "#1b1e28"}" stroke="${b.color}" stroke-width="3"/><text x="${pts[i].x}" y="${pts[i].y + 4}" text-anchor="middle" fill="${hit ? "#1b1e28" : "#eee"}">${mark}</text></g>`;
+    });
+
+    const a = pts[0], bpt = pts[1] || pts[0];
+    const dx = bpt.x - a.x, dy = bpt.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + bpt.x) / 2, my = (a.y + bpt.y) / 2;
+    s += `<text class="name" text-anchor="middle" x="${mx + (-dy / len) * 28}" y="${my + (dx / len) * 28}">${name}</text>`;
+  });
+  document.getElementById("map").innerHTML = s;
+}
+function add(id) {
+  warn = "";
+  const [name, mode] = id.split(":");
+  if (name === "Kerbol") { route = route.filter(r => r.name !== "Kerbol"); route.push({ name, mode }); render(); return; }
+  const b = raw[name];
+  if (b.home && route.length === 0) { warn = "Kerbin is where you already are. Leave first. A Kerbin fly-by or orbit is a return."; render(); return; }
+  if (b.parent !== "Kerbol" && b.parent !== "Kerbin" && !route.find(r => r.name === b.parent)) { warn = "Reach " + b.parent + " before " + name + "."; render(); return; }
+  const parentStop = route.find(r => r.name === b.parent);
+  if (parentStop && parentStop.mode === "land") { warn = "A moon transfer is from the parent's fly-by or orbit, not from the surface."; render(); return; }
+  const same = route.find(r => r.name === name && r.mode === mode);
+  if (same) { route = route.filter(r => r !== same); render(); return; }
+  // Replace in place so order is preserved when changing mode
+  const i = route.findIndex(r => r.name === name);
+  if (i >= 0) {
+    // Block switching a parent to land if a moon of it is already in the route
+    if (mode === "land") {
+      const moonInRoute = route.some(r => raw[r.name] && raw[r.name].parent === name);
+      if (moonInRoute) {
+        warn = "A moon transfer is from the parent's fly-by or orbit, not from the surface. Remove the moon first.";
+        render();
+        return;
+      }
+    }
+    route[i] = { name, mode };
+  } else {
+    route.push({ name, mode });
+  }
+  render();
+}
+function modeLabel(m) {
+  if (m === "fly") return "Fly-by";
+  if (m === "orbit") return "Orbit";
+  if (m === "land") return "Land";
+  return m ? m.charAt(0).toUpperCase() + m.slice(1) : m;
+}
+
+function render() {
+  const fromLko = document.getElementById("fromLko").checked;
+  const orbitFirst = document.getElementById("orbitFirst").checked;
+  const orbitFirstKerbin = document.getElementById("orbitFirstKerbin").checked;
+  const round = document.getElementById("round").checked;
+  let chute = document.getElementById("chute").checked;
+  let chuteKerbin = document.getElementById("chuteKerbin").checked;
+  if (!round) {
+    document.getElementById("chuteKerbin").checked = false;
+    chuteKerbin = false;
+    kerbinChuteDefaulted = false;
+  } else if (!kerbinChuteDefaulted) {
+    document.getElementById("chuteKerbin").checked = true;
+    chuteKerbin = true;
+    kerbinChuteDefaulted = true;
+  }
+  // Default return is aerobrake to the surface. Orbit Before Landing (Kerbin) unlocks the choice.
+  if (round && !orbitFirstKerbin) {
+    document.getElementById("aeroHome").checked = true;
+  }
+  if (!round) document.getElementById("aeroHome").checked = false;
+  // Aerobrake In only if any destination has atmosphere
+  const hasAnyAtm = route.some(s => {
+    const b = raw[s.name];
+    return b && b.atm;
+  });
+  if (!hasAnyAtm) document.getElementById("aeroIn").checked = false;
+  let aero = document.getElementById("aeroIn").checked;
+  const homeAero = document.getElementById("aeroHome").checked;
+  const con = Number(document.getElementById("con").value);
+  document.getElementById("conV").textContent = con + "%";
+  const di = Number(String(document.getElementById("di").value).replace(",", ".")) || 0;
+  const apoReq = Number(String(document.getElementById("apo").value).replace(/,/g, ""));
+  const legs = [];
+  route.forEach((stop, idx) => {
+    const bits = [];
+    let angle = null;
+    if (stop.name === "Kerbol") {
+      if (!legs.length && !fromLko) bits.push(["Launch", 3400]);
+      bits.push(["Escape to solar orbit", Math.round(eject(KB.mu, KB.r + 80000, 0))]);
+      legs.push({ name: "Kerbol", mode: "orbit", dv: bits.reduce((s, x) => s + x[1], 0), angle: null, color: "#f0c84a", bits });
+      return;
+    }
+    const b = raw[stop.name];
+    const parentStop = route.find(r => r.name === b.parent);
+    const fromMoon = b.parent !== "Kerbol" && b.parent !== "Kerbin";
+    const prev = idx > 0 ? route[idx - 1] : null;
+    const directEntry = stop.mode === "land" && b.atm && !orbitFirst;
+    const doOrbitFirst = stop.mode === "land" && orbitFirst;
+    if (b.home) {
+      if (stop.mode !== "fly") {
+        const useAeroHome = homeAero || directEntry;
+        const prevName = prev ? prev.name : null;
+        bits.push([useAeroHome ? "Kerbin aerobrake" : "Kerbin capture", useAeroHome ? 80 : kerbinHome(b, prevName)]);
+      }
+      if (stop.mode === "land") bits.push(["Landing", (chuteKerbin && b.atm) ? 40 : 340]);
+      legs.push({ name: stop.name, mode: stop.mode, dv: bits.reduce((s, x) => s + x[1], 0), angle: null, color: b.color, bits, path: directEntry ? "direct entry" : (doOrbitFirst ? "orbit then land" : "") });
+      return;
+    }
+    if (!legs.length && !fromLko && !fromMoon && !b.home) bits.push(["Launch", 3400]);
+    let usedTransfer = false;
+    // Direct entry forces aero. Orbit-before-land uses normal capture (same as orbit mode).
+    // For airless bodies, Orbit Before Land off = direct surface Pe (no circularize).
+    const useAero = directEntry || (aero && b.atm && !doOrbitFirst);
+    const skipCapture = stop.mode === "land" && !b.atm && !orbitFirst;
+    if (prev && prev.name !== "Kerbin" && prev.name !== "Kerbol") {
+      const t = transferBetween(prev.name, stop.name);
+      if (t) {
+        bits.push([t.note, t.eject]);
+        if (stop.mode !== "fly" && !skipCapture) bits.push([useAero ? "Aerobrake" : "Capture", useAero ? 80 : t.cap]);
+        usedTransfer = true;
+      }
+    }
+    if (!usedTransfer) {
+      if (fromMoon) {
+        const m = fromParent(stop.name, parentStop && parentStop.mode === "fly");
+        bits.push(["Transfer " + m.note, m.to]);
+        if (stop.mode !== "fly" && !skipCapture) bits.push([useAero ? "Aerobrake" : "Capture", useAero ? 60 : m.cap]);
+      } else {
+        const k = kerbinTo(stop.name);
+        angle = k.angle;
+        bits.push(["Ejection", k.eject]);
+        if (stop.mode !== "fly" && !skipCapture) bits.push([useAero ? "Aerobrake" : "Capture", useAero ? 80 : k.cap]);
+      }
+    }
+    // Orbit-before-land already paid the full capture above; no extra circularize bit.
+    // Airless + Orbit Before Land off: single surface kill burn (falls from SOI / transfer, not from low orbit).
+    if (stop.mode === "land" && !b.noLand) {
+      let landDv;
+      if (b.atm) {
+        landDv = chute ? 40 : Math.max(180, circ(b.mu, b.r + 10000) * 0.18);
+      } else if (skipCapture) {
+        // Direct Pe-on-surface: velocity at surface from the approach v∞, then kill it.
+        // Approximate v∞ from the capture burn that would have been used.
+        const rd = b.r + (b.low || 10) * 1000;
+        const capDv = usedTransfer
+          ? (transferBetween(prev && prev.name, stop.name) || {}).cap
+          : (fromMoon ? fromParent(stop.name, false).cap : kerbinTo(stop.name).cap);
+        // Invert the eject() relation roughly: v_surface ≈ circ_surface + capture_dv * (rd / r)^0.5 scale
+        const vCircSurf = circ(b.mu, b.r + 500);
+        const vInfApprox = Math.max(0, (capDv || 0) * 0.85);
+        const vSurf = Math.sqrt(vInfApprox * vInfApprox + 2 * b.mu / (b.r + 500));
+        landDv = Math.max(vSurf - vCircSurf * 0.15, vCircSurf * 1.8);
+      } else {
+        landDv = circ(b.mu, b.r + 10000) * 1.05;
+      }
+      bits.push(["Landing", landDv]);
+    }
+    if (di > 0.05 && stop.mode !== "fly") {
+      const inOrbit = document.getElementById("diInOrbit").checked;
+      const p = planeAt(stop.name, di, Number.isFinite(apoReq) && apoReq > 0 ? apoReq : (b.soi - b.r) / 1000 * 0.7, inOrbit);
+      if (p.raise > 1) bits.push(["Raise to plane-change altitude", p.raise]);
+      bits.push(["Plane change at " + Math.round(p.apo).toLocaleString("en-US") + " km", p.dv]);
+      if (p.drop > 1) bits.push(["Drop back to low orbit", p.drop]);
+    }
+    const path = directEntry ? "direct entry" : (skipCapture ? "direct surface" : (doOrbitFirst ? "orbit then land" : ""));
+    legs.push({ name: stop.name, mode: stop.mode, dv: bits.reduce((s, x) => s + x[1], 0), angle, color: b.color, bits, path });
+  });
+  if (round && legs.length && route.length) {
+    const last = route[route.length - 1];
+    if (last.name === "Kerbol") {
+      warn = "Round Trip with Kerbol is not modeled (return would be 0 m/s).";
+    } else if (last.name === "Kerbin") {
+      // Kerbin stop already handled the return
+    } else {
+      const b = raw[last.name];
+      const bits = [];
+      if (!b) bits.push(["Return", 0]);
+      else {
+        if (last.mode === "land") bits.push(["Ascent", b.ascent || circ(b.mu, b.r + 10000) * 1.07]);
+        if (last.mode === "fly") {
+          // Never captured: only a small course correction to bend the fly-by home
+          bits.push(["Return correction", 120]);
+        } else if (b.parent === "Kerbin") {
+          const back = fromParent(last.name, false);
+          bits.push(["Leave " + last.name, back.cap]);
+        } else if (b.parent === "Kerbol") {
+          const k = kerbinTo(last.name);
+          bits.push(["Eject toward Kerbin", k.cap]);
+        } else {
+          const hop = fromParent(last.name, false);
+          const k = kerbinTo(b.parent);
+          bits.push(["Leave " + last.name, hop.to + hop.cap]);
+          bits.push(["Eject " + b.parent, k.cap]);
+        }
+        // Default: direct aerobrake to surface. Orbit Before Landing lets the user choose aero-to-orbit or full burn.
+        if (!orbitFirstKerbin) {
+          bits.push(["Kerbin aerobrake", 80]);
+        } else if (homeAero) {
+          bits.push(["Kerbin aerobrake to orbit", 80]);
+        } else {
+          bits.push(["Kerbin capture", kerbinHome(b)]);
+        }
+        bits.push(["Landing", chuteKerbin ? 40 : 340]);
+      }
+      const dv = bits.reduce((s, x) => s + x[1], 0);
+      legs.push({ name: "Kerbin", mode: "land", dv, angle: null, color: "#3c95d4", bits, ret: true });
+    }
+  }
+  const ideal = legs.reduce((s, l) => s + l.dv, 0);
+  const launch = legs.reduce((s, l) => s + l.bits.filter(b => b[0] === "Launch").reduce((a, b) => a + b[1], 0), 0);
+  const sum = launch + (ideal - launch) * (1 + con / 100);
+  document.getElementById("total").textContent = fmt(sum) + " m/s";
+  document.getElementById("big").textContent = fmt(sum) + " m/s";
+  document.getElementById("ang").textContent = (legs.find(l => l.angle) || {}).angle ? legs.find(l => l.angle).angle.toFixed(1) + "°" : "—";
+  const planet = route.map(s => raw[s.name]).find(b => b && b.parent === "Kerbol" && !b.home);
+  document.getElementById("ejectAng").textContent = planet ? Object.keys(raw).find(n => raw[n] === planet) + " " + ejectionAngle(planet.sma).toFixed(1) + "°" : "—";
+  const focus = route.length && raw[route[route.length - 1].name] ? raw[route[route.length - 1].name] : null;
+  document.getElementById("soiNote").textContent = focus ? route[route.length - 1].name + " SOI edge " + Math.round((focus.soi - focus.r) / 1000).toLocaleString("en-US") + " km." : "";
+  const homeBody = round && homeAero && route.length ? raw[route[route.length - 1].name] : null;
+  const vInf = homeBody && homeBody.parent !== "Kerbin" ? (kerbinTo(homeBody.parent === "Kerbol" ? route[route.length - 1].name : homeBody.parent).vInfHome || 0) : 0;
+  const entry = vInf ? Math.sqrt(vInf * vInf + 2 * KB.mu / (KB.r + 35000)) : 0;
+  document.getElementById("warn").textContent = warn || (entry > 3500 ? "Kerbin entry " + fmt(entry) + " m/s. One pass may not be enough." : "");
+  const hasLand = route.some(s => s.mode === "land");
+  const hasDest = route.length > 0;
+  const hasAtmLand = route.some(s => {
+    const b = raw[s.name];
+    return b && s.mode === "land" && b.atm;
+  });
+  // Nothing selectable except Start in LKO until a destination is chosen
+  const lockAll = !hasDest;
+  const setLock = (id, locked, forceOff) => {
+    const lab = document.querySelector("label:has(#" + id + ")");
+    const cb = document.getElementById(id);
+    if (!lab || !cb) return;
+    lab.style.opacity = locked ? "0.4" : "1";
+    cb.disabled = locked;
+    if (locked && forceOff) cb.checked = false;
+  };
+  setLock("round", lockAll, true);
+  setLock("aeroIn", lockAll || !hasAnyAtm, true);
+  setLock("aeroHome", lockAll || !round, true);
+  setLock("chute", lockAll || !hasAtmLand, true);
+  setLock("chuteKerbin", lockAll || !round, true);
+  setLock("orbitFirst", lockAll || !hasLand, true);
+  setLock("orbitFirstKerbin", lockAll || !round, true);
+  // Aerobrake Home locked on unless Orbit Before Landing (Kerbin) is selected
+  if (round && !orbitFirstKerbin) {
+    document.getElementById("aeroHome").checked = true;
+    document.getElementById("aeroHome").disabled = true;
+    const ah = document.querySelector("label:has(#aeroHome)");
+    if (ah) ah.style.opacity = "0.7";
+  } else if (round && orbitFirstKerbin) {
+    document.getElementById("aeroHome").disabled = false;
+    const ah = document.querySelector("label:has(#aeroHome)");
+    if (ah) ah.style.opacity = "1";
+  }
+  const origin = fromLko ? "Kerbin — Low orbit" : "Kerbin — Surface";
+  document.getElementById("journey").innerHTML = `<div class="origin"><i class="dot" style="background:#3c95d4"></i>${origin}</div>` + legs.map((l, i) => `
+    <div class="card"><span>Leg ${i + 1}</span><span></span><span>ΔV</span><b>${fmt((() => { const launchBit = l.bits.filter(b => b[0] === "Launch").reduce((a, b) => a + b[1], 0); return launchBit + (l.dv - launchBit) * (1 + con / 100); })())} m/s</b><span>Transfer</span><b>${l.angle ? l.angle.toFixed(1) + "°" : "—"}</b></div>
+    <div class="stop"><i class="dot" style="background:${l.color}"></i><div style="flex:1">${l.name} — ${modeLabel(l.mode)}${l.path ? " (" + l.path + ")" : ""}<div style="color:#8b93a7;font-size:12px">${l.bits.map(b => b[0] + " " + fmt(b[1])).join(" · ")}</div></div>${l.ret ? "" : `<button class="rm" data-i="${i}">Remove</button>`}</div>`).join("");
+  document.querySelectorAll(".rm").forEach(btn => btn.onclick = () => {
+    const i = Number(btn.dataset.i);
+    const removed = route[i];
+    route.splice(i, 1);
+    // Cascade: remove any later stops whose parent was the removed body
+    if (removed) {
+      for (let j = route.length - 1; j >= i; j--) {
+        const b = raw[route[j].name];
+        if (b && b.parent === removed.name) route.splice(j, 1);
+      }
+    }
+    document.getElementById("relAlt").value = "";
+    render();
+  });
+  antennas();
+  mission();
+  stages(legs, con);
+  draw();
+}
+
+const ANT = [
+  ["Communotron 16 (S)", 500e3, 1, ["direct"]], 
+  ["HG-5", 5e6, 0.75, ["direct", "relay"]], 
+  ["DTS-M1", 2e9, 0.75, ["direct"]], 
+  ["RA-2", 2e9, 0.75, ["relay"]], 
+  ["HG-55", 15e9, 0.75, ["direct"]], 
+  ["RA-15", 15e9, 0.75, ["relay"]], 
+  ["88-88", 100e9, 0.75, ["direct"]], 
+  ["RA-100", 100e9, 0.75, ["relay"]]
+];
+const PKT = [
+  { size: 2, cost: 12 }, // Communotron 16
+  { size: 2, cost: 18 }, // HG-5
+  { size: 2, cost: 12 }, // DTS-M1
+  { size: 1, cost: 24 }, // RA-2
+  { size: 3, cost: 20 }, // HG-55
+  { size: 2, cost: 24 }, // RA-15
+  { size: 2, cost: 20 }, // 88-88
+  { size: 4, cost: 24 }  // RA-100
+];
+const EXPERIMENTS = [
+  { name: "Crew Report", mits: 5 },
+  { name: "EVA Report", mits: 8 },
+  { name: "Temperature Scan", mits: 8 },
+  { name: "Mystery Goo", mits: 10 },
+  { name: "Barometer", mits: 12 },
+  { name: "Materials Study", mits: 25 },
+  { name: "Infrared Telescope", mits: 30 },
+  { name: "Magnetometer Report", mits: 45 },
+  { name: "Seismic Scan", mits: 50 },
+  { name: "Gravity Scan", mits: 60 },
+  { name: "Surface Sample", mits: 30 },
+  { name: "Atmosphere Analysis", mits: 200, needsAtm: true }
+];
+
+document.getElementById("ants").innerHTML = ANT.map((a, i) => `
+  <div class="ant-card">
+    <div class="ant-info">
+      <div>
+        <div class="ant-title">${a[0]}</div>
+        <div class="ant-range">Range: ${dist(a[1])}</div>
+      </div>
+      <div class="ant-badges">
+        ${a[3].map(t => `<span class="ant-badge badge-${t}">${t}</span>`).join('')}
+      </div>
+    </div>
+    <div class="ant-ctrl">
+      <span style="font-size:11px; color:var(--dim)">Count:</span>
+      <div class="spin">
+        <button type="button" data-d="-1" data-i="${i}">−</button>
+        <span id="ant${i}">0</span>
+        <button type="button" data-d="1" data-i="${i}">+</button>
+      </div>
+    </div>
+  </div>`).join("");
+
+document.getElementById("ants").addEventListener("click", e => {
+  const btn = e.target.closest("button"); if (!btn) return;
+  const el = document.getElementById("ant" + btn.dataset.i);
+  el.textContent = String(Math.max(0, Number(el.textContent) + Number(btn.dataset.d)));
+  antennas();
+});
+
+function kDays(sec) { return (sec / 21600).toFixed(1); }
+const peKm = { Kerbin: 35, Eve: 72, Duna: 15, Laythe: 22, Jool: 145 };
+
+function mission() {
+  // Use the same first non-Kerbin heliocentric body that ejectAng uses
+  const planetBody = route.map(s => raw[s.name]).find(b => b && b.parent === "Kerbol" && !b.home);
+  const named = planetBody ? Object.keys(raw).find(n => raw[n] === planetBody) : (route.length && raw[route[route.length - 1].name] ? route[route.length - 1].name : "");
+  if (!named) {
+    document.getElementById("winBody").textContent = "Window";
+    document.getElementById("phase").textContent = "—";
+    document.getElementById("phaseBack").textContent = "—";
+    document.getElementById("winTo").innerHTML = windowFig(null);
+    document.getElementById("winFrom").innerHTML = windowFig(null);
+    document.getElementById("coast").textContent = "—";
+    document.getElementById("syn").textContent = "—";
+    document.getElementById("relPer").textContent = "—";
+    document.getElementById("relGap").textContent = "—";
+    document.getElementById("relLink").textContent = "—";
+    document.getElementById("relResAlt").textContent = "—";
+    document.getElementById("relBus").textContent = "—";
+    document.getElementById("relDvManeuver").textContent = "—";
+    document.getElementById("relDvTotal").textContent = "—";
+    document.getElementById("relFig").innerHTML = "";
+    document.getElementById("relNote").textContent = "Pick a body on the map.";
+    document.getElementById("relAlt").placeholder = "auto";
+    document.getElementById("pe").textContent = "—";
+    document.getElementById("peNote").textContent = "";
+    document.getElementById("peBack").textContent = "—";
+    document.getElementById("peBackNote").textContent = "";
+    return;
+  }
+  const target = named;
+  const b = raw[target];
+  const planet = b.home ? null : b.parent === "Kerbol" ? b : b.parent === "Kerbin" ? null : raw[b.parent];
+  if (!planet) {
+    document.getElementById("winBody").textContent = target;
+    document.getElementById("phase").textContent = "Local";
+    document.getElementById("phaseBack").textContent = "—";
+    document.getElementById("winTo").innerHTML = windowFig(null);
+    document.getElementById("winFrom").innerHTML = windowFig(null);
+    document.getElementById("coast").textContent = "—";
+    document.getElementById("syn").textContent = "—";
+  } else {
+    const a = (KB.sma + planet.sma) / 2;
+    const coast = Math.PI * Math.sqrt(a ** 3 / SUN);
+    const pK = 2 * Math.PI * Math.sqrt(KB.sma ** 3 / SUN);
+    const pT = 2 * Math.PI * Math.sqrt(planet.sma ** 3 / SUN);
+    const syn = 1 / Math.abs(1 / pK - 1 / pT);
+    const isOuter = planet.sma > KB.sma;
+    document.getElementById("winBody").textContent = planet === b ? target : target + " via " + b.parent;
+    document.getElementById("phase").textContent = phase(planet.sma).toFixed(1) + "°";
+    document.getElementById("phaseBack").textContent = phaseBack(planet.sma).toFixed(1) + "°";
+    document.getElementById("winTo").innerHTML = windowFig(phase(planet.sma), planet.color, true, isOuter);
+    document.getElementById("winFrom").innerHTML = document.getElementById("round").checked ? windowFig(phaseBack(planet.sma), planet.color, false, isOuter) : windowFig(null);
+    if (!document.getElementById("round").checked) document.getElementById("phaseBack").textContent = "—";
+    document.getElementById("coast").textContent = kDays(coast);
+    document.getElementById("syn").textContent = kDays(syn);
+  }
+  const aeroOn = document.getElementById("aeroIn").checked;
+  const homeOn = document.getElementById("aeroHome").checked && document.getElementById("round").checked;
+  const anyDirect = route.some(s => {
+    const bb = raw[s.name];
+    return bb && s.mode === "land" && bb.atm && !document.getElementById("orbitFirst").checked;
+  });
+  const aeroStops = (aeroOn || anyDirect) ? route.filter(s => s.mode !== "fly" && peKm[s.name]).map(s => s.name + " " + peKm[s.name] + " km") : [];
+  const destPe = aeroStops.join(" · ");
+  const homePe = homeOn ? "Kerbin " + peKm.Kerbin + " km" : "";
+  document.getElementById("pe").textContent = destPe || "—";
+  document.getElementById("peNote").textContent = destPe ? "Set at the body with air, even if a moon is the last stop." : (anyDirect ? "Direct entry forces aerobrake." : "Turn on arrival aerobrake.");
+  document.getElementById("peBack").textContent = homePe || "—";
+  document.getElementById("peBackNote").textContent = homePe ? "Kerbin return." : "No return aerobrake.";
+  
+  const host = b;
+  const hostName = target;
+  const edge = (host.soi - host.r) / 1000;
+  const nCraft = Number(document.querySelector("#relays button.on")?.dataset.n || "3");
+  const mode = document.querySelector("#relMode button.on")?.dataset.m || "in";
+  const atmo = host.atm || 10;
+  // For 2 sats (polar pair) the equatorial LOS formula divides by cos(90°)=0; skip it
+  const isPolar = nCraft === 2;
+  const losAlt = isPolar ? 0 : host.r * (1 / Math.cos(Math.PI / nCraft) - 1) / 1000;
+  const floor = Math.max(atmo, losAlt);
+  let alt = Number(String(document.getElementById("relAlt").value).replace(/,/g, ""));
+  const autoAlt = Math.max(floor + 5, edge * 0.25);
+  const relAltEl = document.getElementById("relAlt");
+  if (relAltEl.value.trim() === "" || !Number.isFinite(alt)) {
+    alt = autoAlt;
+    relAltEl.placeholder = Math.round(autoAlt).toLocaleString("en-US");
+  } else {
+    relAltEl.placeholder = "auto";
+  }
+  const problems = [];
+  
+  if (!Number.isFinite(alt)) problems.push("Enter an altitude.");
+  else {
+    if (alt <= atmo) problems.push("Inside the atmosphere.");
+    if (!isPolar && alt < losAlt) problems.push("Planet blocks the link. Need at least " + Math.ceil(losAlt).toLocaleString("en-US") + " km.");
+    if (alt > edge) problems.push("Outside the SOI.");
+  }
+  
+  const rFinal = host.r + (Number.isFinite(alt) ? alt : floor) * 1000;
+  const tFinal = 2 * Math.PI * Math.sqrt(rFinal ** 3 / host.mu);
+  const link = 2 * rFinal * Math.sin(Math.PI / nCraft);
+  
+  let tBus, rRes, resAltLabel, maneuverDv;
+  if (mode === "in") {
+    tBus = tFinal * ((nCraft - 1) / nCraft);
+    const aBus = Math.pow(host.mu * Math.pow(tBus / (2 * Math.PI), 2), 1 / 3);
+    rRes = 2 * aBus - rFinal;
+    resAltLabel = "Resonant Pe: " + ((rRes - host.r) / 1000).toFixed(1) + " km";
+    const vFinal = circ(host.mu, rFinal);
+    const vAp = Math.sqrt(Math.max(0, host.mu * (2 / rFinal - 1 / aBus)));
+    maneuverDv = Math.abs(vFinal - vAp);
+  } else {
+    tBus = tFinal * ((nCraft + 1) / nCraft);
+    const aBus = Math.pow(host.mu * Math.pow(tBus / (2 * Math.PI), 2), 1 / 3);
+    rRes = 2 * aBus - rFinal;
+    resAltLabel = "Resonant Ap: " + ((rRes - host.r) / 1000).toFixed(1) + " km";
+    const vFinal = circ(host.mu, rFinal);
+    const vPe = Math.sqrt(Math.max(0, host.mu * (2 / rFinal - 1 / aBus)));
+    maneuverDv = Math.abs(vPe - vFinal);
+  }
+  
+  const resAltKm = (rRes - host.r) / 1000;
+  if (resAltKm <= atmo) problems.push("Resonant orbit dips into atmosphere (" + resAltKm.toFixed(1) + " km).");
+  if (resAltKm > edge) problems.push("Resonant orbit outside SOI (" + resAltKm.toFixed(0) + " km).");
+  
+  const moons = Object.keys(raw).filter(n => raw[n].parent === hostName).map(n => ({ name: n, ...raw[n] }));
+  const hitMoons = [];
+  moons.forEach(m => {
+    const mMin = m.sma - m.soi;
+    const mMax = m.sma + m.soi;
+    const orbMin = Math.min(rRes, rFinal);
+    const orbMax = Math.max(rRes, rFinal);
+    const altHit = Number.isFinite(alt) && alt > (mMin - host.r) / 1000 && alt < (mMax - host.r) / 1000;
+    if (!(orbMax < mMin || orbMin > mMax) || altHit) {
+      hitMoons.push(m);
+      problems.push((altHit ? "Altitude" : "Resonant orbit") + " crosses " + m.name + " SOI (" + Math.round(mMin / 1000).toLocaleString() + "–" + Math.round(mMax / 1000).toLocaleString() + " km).");
+    }
+  });
+
+  document.getElementById("relPer").textContent = kDays(tFinal) + " d";
+  document.getElementById("relGap").textContent = (360 / nCraft).toFixed(0) + "°";
+  document.getElementById("relLink").textContent = dist(link);
+  document.getElementById("relResAlt").textContent = resAltLabel;
+  document.getElementById("relBus").textContent = kDays(tBus) + " d";
+  document.getElementById("relDvManeuver").textContent = fmt(maneuverDv) + " m/s";
+  const totalPlacement = (nCraft - 1) * 2 * maneuverDv;
+  document.getElementById("relDvTotal").textContent = fmt(totalPlacement) + " m/s";
+  document.getElementById("relNote").innerHTML = (problems.length
+    ? "<span class='bad'>" + hostName + ": " + problems.join(" ") + "</span>"
+    : "<span class='ok'>" + hostName + ": Stable resonant deployment plan. Safe clearance.</span>")
+    + "<br><span style='color:var(--dim)'>First relay dropped on initial circularization. Each additional relay = drive + circularize.</span>";
+
+  const fig = problems.length ? "#e06a6a" : "#7dcea0";
+  let figEl = document.getElementById("relFig");
+  if (isPolar) {
+    if (figEl.tagName === "svg") {
+      figEl.outerHTML = `<div id="relFig" style="padding:10px 6px;text-align:center;line-height:1.45"><div style="font-size:16px;font-weight:600;color:#7dffa0;margin-bottom:8px">Polar pair</div><div style="font-size:13px;color:#c8e6d0">Body blocks the direct link.<br>Add an equatorial relay<br>to keep them connected.</div></div>`;
+    }
+  } else {
+    if (figEl.tagName !== "svg") {
+      figEl.outerHTML = `<svg id="relFig" viewBox="0 0 140 100" width="140" height="100"></svg>`;
+      figEl = document.getElementById("relFig");
+    }
+    const ring = problems.length ? 36 : 46;
+    const pts = Array.from({ length: nCraft }, (_, i) => {
+      const a = -Math.PI / 2 + i * 2 * Math.PI / nCraft;
+      return [70 + Math.cos(a) * ring, 50 + Math.sin(a) * (ring * 0.78)];
+    });
+    const links = problems.length ? "" : pts.map((p, i) => {
+      const q = pts[(i + 1) % nCraft];
+      return `<line x1="${p[0]}" y1="${p[1]}" x2="${q[0]}" y2="${q[1]}" stroke="#7dcea0" stroke-width="1.5"/>`;
+    }).join("");
+    const dots = pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${fig}"/>`).join("");
+    const moonMark = hitMoons.map((m, i) => {
+      const a = Math.PI / 5 + i * 0.6;
+      const x = 70 + Math.cos(a) * 34, y = 50 + Math.sin(a) * 26;
+      return `<circle cx="${x}" cy="${y}" r="7" fill="${m.color}" stroke="#e06a6a" stroke-width="1.5"/><text x="${x}" y="${y - 10}" text-anchor="middle" fill="${m.color}" font-size="8">${m.name}</text>`;
+    }).join("");
+    figEl.innerHTML = `<circle cx="70" cy="50" r="16" fill="${host.color}" opacity="0.85"/><circle cx="70" cy="50" r="28" fill="none" stroke="#3a4154"/>${links}${dots}${moonMark}`;
+  }
+}
+
+document.getElementById("relays").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  document.querySelectorAll("#relays button").forEach(x => x.classList.toggle("on", x === btn));
+  mission();
+});
+document.getElementById("relMode").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  document.querySelectorAll("#relMode button").forEach(x => x.classList.toggle("on", x === btn));
+  mission();
+});
+document.getElementById("relAlt").addEventListener("input", mission);
+
+// FIXED: Corrected dist() helper function formatting string concatenation
+function dist(n) { 
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + " Gm";
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + " Mm";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + " km";
+  return fmt(n) + " m";
+}
+
+function stages(legs, con) {
+  const box = document.getElementById("stages");
+  if (!legs.length) { box.innerHTML = `<div class="stat"><div class="lbl">Stages</div><div class="big">—</div><div class="lbl">Pick a route.</div></div>`; return; }
+  const pad = 1 + con / 100;
+  const buckets = { Launch: [], Transfer: [], Lander: [], Return: [] };
+  legs.forEach(l => l.bits.forEach(bit => {
+    const n = bit[0];
+    const key = n === "Launch" ? "Launch" : /Ascent/.test(n) ? "Lander" : l.ret ? "Return" : /Land/.test(n) ? "Lander" : "Transfer";
+    buckets[key].push(bit);
+  }));
+  const shield = name => {
+    const anyDirect = route.some(s => {
+      const body = raw[s.name];
+      return body && s.mode === "land" && body.atm && !document.getElementById("orbitFirst").checked;
+    });
+    const usedAero = document.getElementById("aeroIn").checked || anyDirect;
+    if (name === "Transfer" && usedAero && legs.some(l => !l.ret && raw[l.name] && raw[l.name].atm)) return "Heat shield on arriving ship.";
+    if (name === "Return" && document.getElementById("aeroHome").checked) return "Heat shield for Kerbin return.";
+    if (name === "Lander" && legs.some(l => l.mode === "land" && raw[l.name] && raw[l.name].atm && !l.ret)) return "Atmosphere on landing.";
+    return "No heat shield.";
+  };
+  box.innerHTML = ["Launch", "Transfer", "Lander", "Return"].filter(k => buckets[k].length).map(k => {
+    const rawDv = buckets[k].reduce((s, b) => s + b[1], 0);
+    const dv = k === "Launch" ? rawDv : rawDv * pad;
+    return `<div class="stat"><div class="lbl">${k}</div><div class="big">${fmt(dv)} m/s</div><div class="lbl">${buckets[k].map(b => b[0]).join(" · ")}</div><div class="lbl">${shield(k)}</div></div>`;
+  }).join("");
+}
+
+function sciencePower() {
+  const box = document.getElementById("sciencePower");
+  const stop = route.length ? route[route.length - 1] : null;
+  const targetName = stop && (raw[stop.name] || stop.name === "Kerbol") ? stop.name : "";
+  const counts = ANT.map((a, i) => Number(document.getElementById("ant" + i)?.textContent) || 0);
+  const selected = counts.map((c, i) => ({ i, c, name: ANT[i][0], pkt: PKT[i] })).filter(a => a.c > 0);
+  if (!targetName || !selected.length) {
+    box.innerHTML = `<div class="stat" style="grid-column:1/-1"><div class="lbl">${!targetName ? "Pick a destination on the map" : "Select an antenna above"}</div></div>`;
+    return;
+  }
+  // Prefer the most EC-efficient antenna among those that can actually reach the far side
+  const far = (() => {
+    const body = raw[targetName] || { sma: 0, parent: "Kerbol", r: 261600000 };
+    if (body.home) return 0;
+    const sma = body.parent === "Kerbin" ? 0 : body.parent === "Kerbol" ? body.sma : raw[body.parent].sma;
+    const moon = body.parent === "Kerbol" || body.parent === "Kerbin" ? (body.parent === "Kerbin" ? body.sma : 0) : body.sma;
+    return body.parent === "Kerbin" ? body.sma : sma + KB.sma + moon;
+  })();
+  const dsnG = Number(document.querySelector("#dsn button.on")?.dataset.g || 250);
+  const reachable = selected.filter(a => {
+    const range = Math.sqrt(ANT[a.i][1] * dsnG * 1e9);
+    return range >= far;
+  });
+  const pool = reachable.length ? reachable : selected;
+  const best = pool.reduce((a, b) => (a.pkt.cost / a.pkt.size) <= (b.pkt.cost / b.pkt.size) ? a : b);
+  const b = raw[targetName] || { r: 261600000, atm: 0 }; // Kerbol fallback
+  const mode = stop.mode || "orbit";
+  const aeroIn = document.getElementById("aeroIn")?.checked || false;
+  const pkt = best.pkt;
+  const antName = best.name;
+  const radiusKm = b.r / 1000;
+  const isKerbolOrbit = targetName === "Kerbol" && mode === "orbit";
+  const canLand = mode === "land";
+  const canAtm = b.atm > 0 && (canLand || aeroIn);
+  const list = [
+    ...EXPERIMENTS.filter(e => {
+      if (e.name === "Seismic Scan" || e.name === "Surface Sample") return canLand;
+      if (e.name === "Atmosphere Analysis") return canAtm;
+      if (e.name === "Infrared Telescope") return isKerbolOrbit;
+      return true;
+    }),
+    ...(isKerbolOrbit ? [] : [
+      { name: "M700 Resource Scan", mits: Math.round((b.r / 1000) * 0.205) },
+      { name: "M700 Science Report", mits: 20 }
+    ])
+  ];
+  const rows = list.map(e => {
+    const packets = Math.ceil(e.mits / pkt.size);
+    const ec = packets * pkt.cost;
+    return `<div class="stat"><div class="lbl">${e.name}</div><div class="big">${fmt(ec)} EC</div><div class="lbl">${e.mits} Mits · ${packets} packets</div></div>`;
+  }).join("");
+  const modeNote = mode === "land" ? "landing" : mode === "orbit" ? "orbit" : "fly-by";
+  const antList = selected.map(a => a.name + (a.c > 1 ? " ×" + a.c : "")).join(", ");
+  box.innerHTML = `<div class="stat" style="grid-column:1/-1"><div class="lbl">${targetName} (${modeNote})</div><div class="lbl">Antennas: ${antList}</div><div class="lbl">Numbers use most efficient: ${antName}</div></div>` + rows;
+}
+
+function antennas() {
+  const counts = ANT.map((a, i) => Number(document.getElementById("ant" + i).textContent) || 0);
+  sciencePower();
+  let sum = 0, best = 0, wExp = 0;
+  ANT.forEach((a, i) => { 
+    const p = a[1] * counts[i]; 
+    sum += p; 
+    if (a[1] > best && counts[i]) best = a[1]; 
+    wExp += p * a[2]; 
+  });
+  const power = best ? best * Math.pow(sum / best, wExp / sum) : 0;
+  const targetName = route.length && raw[route[route.length - 1].name] ? route[route.length - 1].name : "";
+
+  if (!power) {
+    document.getElementById("rng").textContent = "—";
+    document.getElementById("verdict").textContent = "Select an antenna.";
+    if (!targetName) {
+      document.getElementById("near").textContent = "—";
+      document.getElementById("far").textContent = "—";
+      document.getElementById("nearLbl").textContent = "Closest to Kerbin";
+      document.getElementById("farLbl").textContent = "Farthest from Kerbin";
+    } else {
+      const body = raw[targetName];
+      if (body.home) {
+        document.getElementById("near").textContent = "—";
+        document.getElementById("far").textContent = "—";
+        document.getElementById("nearLbl").textContent = "Kerbin (local)";
+        document.getElementById("farLbl").textContent = "Kerbin (local)";
+      } else {
+        const sma = body.parent === "Kerbin" ? 0 : body.parent === "Kerbol" ? body.sma : raw[body.parent].sma;
+        const moon = body.parent === "Kerbol" || body.parent === "Kerbin" ? (body.parent === "Kerbin" ? body.sma : 0) : body.sma;
+        const near = body.parent === "Kerbin" ? body.sma : Math.abs(sma - KB.sma) - moon;
+        const far = body.parent === "Kerbin" ? body.sma : sma + KB.sma + moon;
+        document.getElementById("near").textContent = dist(Math.max(near, 0));
+        document.getElementById("far").textContent = dist(far);
+        document.getElementById("nearLbl").textContent = targetName + ", closest to Kerbin";
+        document.getElementById("farLbl").textContent = targetName + ", farthest from Kerbin";
+      }
+    }
+    return;
+  }
+
+  if (!targetName) {
+    document.getElementById("near").textContent = "—";
+    document.getElementById("far").textContent = "—";
+    document.getElementById("nearLbl").textContent = "Closest to Kerbin";
+    document.getElementById("farLbl").textContent = "Farthest from Kerbin";
+    document.getElementById("rng").textContent = dist(Math.sqrt(power * dsnG * 1e9));
+    document.getElementById("verdict").textContent = "Pick a body on the map.";
+    return;
+  }
+
+  const body = raw[targetName];
+  if (body.home) {
+    document.getElementById("near").textContent = "—";
+    document.getElementById("far").textContent = "—";
+    document.getElementById("nearLbl").textContent = "Kerbin (local)";
+    document.getElementById("farLbl").textContent = "Kerbin (local)";
+    document.getElementById("rng").textContent = dist(Math.sqrt(power * dsnG * 1e9));
+    document.getElementById("verdict").textContent = "Local to Kerbin.";
+    return;
+  }
+  const sma = body.parent === "Kerbin" ? 0 : body.parent === "Kerbol" ? body.sma : raw[body.parent].sma;
+  const moon = body.parent === "Kerbol" || body.parent === "Kerbin" ? (body.parent === "Kerbin" ? body.sma : 0) : body.sma;
+  const near = body.parent === "Kerbin" ? body.sma : Math.abs(sma - KB.sma) - moon;
+  const far = body.parent === "Kerbin" ? body.sma : sma + KB.sma + moon;
+  document.getElementById("near").textContent = dist(Math.max(near, 0));
+  document.getElementById("far").textContent = dist(far);
+  document.getElementById("nearLbl").textContent = targetName + ", closest to Kerbin";
+  document.getElementById("farLbl").textContent = targetName + ", farthest from Kerbin";
+
+  const range = Math.sqrt(power * dsnG * 1e9);
+  document.getElementById("rng").textContent = dist(range);
+  document.getElementById("verdict").innerHTML = range >= far ? "<p class='ok'>Reaches Kerbin from the far side.</p>" : range >= near ? "<p class='ok'>Reaches Kerbin only on the near side.</p>" : "<p class='bad'>Does not reach Kerbin.</p>";
+}
+
+document.getElementById("clear").onclick = () => {
+  route = []; warn = "";
+  kerbinChuteDefaulted = false;
+  ["fromLko", "round", "aeroIn", "aeroHome", "chute", "chuteKerbin", "orbitFirst", "orbitFirstKerbin"].forEach(id => { document.getElementById(id).checked = false; });
+  document.getElementById("con").value = 0;
+  document.getElementById("di").value = 0;
+  document.getElementById("diInOrbit").checked = false;
+  document.getElementById("apo").value = "";
+  document.getElementById("relAlt").value = "";
+  render();
+};
+["fromLko", "round", "aeroIn", "aeroHome", "chute", "chuteKerbin", "orbitFirst", "orbitFirstKerbin"].forEach(id => document.getElementById(id).addEventListener("change", render));
+let dsnG = 250;
+document.getElementById("dsn").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  dsnG = Number(btn.dataset.g);
+  document.querySelectorAll("#dsn button").forEach(b => b.classList.toggle("on", b === btn));
+  antennas();
+});
+document.getElementById("con").addEventListener("input", render);
+document.getElementById("diAuto").addEventListener("click", () => {
+  const focus = route.length && raw[route[route.length - 1].name];
+  if (focus && focus.inc) {
+    document.getElementById("di").value = String(focus.inc);
+    render();
+  }
+});
+["di", "apo"].forEach(id => document.getElementById(id).addEventListener("input", render));
+document.getElementById("diInOrbit").addEventListener("change", render);
+const svg = document.getElementById("map");
+svg.addEventListener("click", e => {
+  const n = e.target.closest(".node");
+  if (n) add(n.dataset.id);
+});
+svg.addEventListener("pointerover", e => {
+  const n = e.target.closest(".node");
+  if (!n) return;
+  const name = n.dataset.id.split(":")[0];
+  const b = raw[name];
+  const tip = document.getElementById("tip");
+  if (!b) { tip.style.display = "none"; return; }
+  const g = b.mu / (b.r * b.r);
+  tip.innerHTML = `<b>${name}</b><br>Gravity ${(g / 9.81).toFixed(2)} g<br>Atmosphere ${b.atm || 0} km<br>SOI ${Math.round((b.soi - b.r) / 1000).toLocaleString("en-US")} km`;
+  tip.style.display = "block";
+  const r = document.querySelector(".stage").getBoundingClientRect();
+  tip.style.left = (e.clientX - r.left + 12) + "px";
+  tip.style.top  = (e.clientY - r.top  + 12) + "px";
+});
+svg.addEventListener("pointermove", e => {
+  const tip = document.getElementById("tip");
+  if (tip.style.display === "block") {
+    const r = document.querySelector(".stage").getBoundingClientRect();
+    tip.style.left = (e.clientX - r.left + 12) + "px";
+    tip.style.top  = (e.clientY - r.top  + 12) + "px";
+  }
+});
+svg.addEventListener("pointerout", e => {
+  const related = e.relatedTarget;
+  if (!related || !related.closest || !related.closest(".node")) {
+    document.getElementById("tip").style.display = "none";
+  }
+});
+// Delayed hover tips for the planning toggles and other marked areas (same style as map nodes)
+let tipTimer = null;
+document.querySelectorAll("[data-tip]").forEach(lab => {
+  const place = (e, tip) => {
+    const r = document.querySelector(".stage").getBoundingClientRect();
+    const leftSide = lab.dataset.tipSide === "left";
+    const offset = leftSide ? -Math.min(280, tip.offsetWidth + 16) : 14;
+    tip.style.left = (e.clientX - r.left + offset) + "px";
+    tip.style.top  = (e.clientY - r.top + 14) + "px";
+  };
+  lab.addEventListener("pointerenter", e => {
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => {
+      const tip = document.getElementById("tip");
+      tip.innerHTML = lab.dataset.tip;
+      tip.style.display = "block";
+      place(e, tip);
+    }, 600);
+  });
+  lab.addEventListener("pointermove", e => {
+    const tip = document.getElementById("tip");
+    if (tip.style.display === "block" && tip.innerHTML === lab.dataset.tip) place(e, tip);
+  });
+  lab.addEventListener("pointerleave", () => {
+    clearTimeout(tipTimer);
+    const tip = document.getElementById("tip");
+    if (tip.innerHTML === lab.dataset.tip) tip.style.display = "none";
+  });
+});
+const view = { x: 80, y: 20, w: 940, h: 660 };
+function clampView() {
+  const minX = -120, maxX = 1220, minY = -200, maxY = 900;
+  view.x = Math.min(maxX - view.w * 0.35, Math.max(minX - view.w * 0.65, view.x));
+  view.y = Math.min(maxY - view.h * 0.35, Math.max(minY - view.h * 0.65, view.y));
+}
+function applyView() {
+  const box = svg.getBoundingClientRect();
+  if (box.width && box.height) view.h = view.w * box.height / box.width;
+  clampView();
+  svg.setAttribute("viewBox", view.x + " " + view.y + " " + view.w + " " + view.h);
+}
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const box = svg.getBoundingClientRect();
+  const px = view.x + (e.clientX - box.left) / box.width * view.w;
+  const py = view.y + (e.clientY - box.top) / box.height * view.h;
+  const next = Math.min(1300, Math.max(360, view.w * (e.deltaY < 0 ? 0.9 : 1.12)));
+  const scale = next / view.w;
+  view.x = px - (px - view.x) * scale; view.y = py - (py - view.y) * scale; view.w = next;
+  applyView();
+}, { passive: false });
+let drag = null;
+svg.addEventListener("pointerdown", e => {
+  if (e.target.closest(".node")) return;
+  drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+  svg.setPointerCapture(e.pointerId);
+});
+svg.addEventListener("pointermove", e => { if (!drag) return; const box = svg.getBoundingClientRect(); view.x = drag.vx - (e.clientX - drag.x) / box.width * view.w; view.y = drag.vy - (e.clientY - drag.y) / box.height * view.h; applyView(); });
+svg.addEventListener("pointerup", () => { drag = null; });
+svg.addEventListener("pointercancel", () => { drag = null; });
+applyView();
+window.addEventListener("resize", applyView);
+render();
+</script>
+</body>
+</html>
